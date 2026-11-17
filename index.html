@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lịch học & điểm danh</title>
+  <!-- TV2 -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<!-- =====================================================================
+     TV1 — HTML5: KHUNG LỊCH TUẦN (CSS Grid) + LỊCH THÁNG (grid 7 cột)
+     Thẻ ngữ nghĩa: header / nav / main / section / time / footer,
+     aria-label cho từng ô lịch. Script dựng lịch nằm cuối file này.
+     Các "móc" cho vai trò khác (ĐỪNG đổi id/class):
+       #calendar            TV3 gắn event delegation tại đây
+       .session[data-session-id][data-status]   ca học (TV2 tô màu, TV3 bắt click)
+       #btn-undo #btn-redo  TV3
+       #tk-table #tk-pie #tk-bar #btn-tk-modal  TV4
+       #btn-manage #btn-export #btn-import #file-import #btn-reset  + #manage-overlay  TV5
+     ===================================================================== -->
+<div class="app">
+
+  <header>
+    <h1>Lịch học &amp; điểm danh</h1>
+    <div class="header-actions">
+      <button type="button" class="btn" id="btn-manage">⚙️ Quản lý</button>
+      <button type="button" class="btn" id="btn-export">⬇️ Xuất JSON</button>
+      <button type="button" class="btn" id="btn-import">⬆️ Nhập JSON</button>
+      <input type="file" id="file-import" accept=".json,application/json" hidden>
+      <button type="button" class="btn" id="btn-reset" title="Đặt lại dữ liệu mẫu">↺ Dữ liệu mẫu</button>
+      <label class="switch" title="Chế độ tối">
+        <input type="checkbox" id="dark-toggle" aria-label="Bật chế độ tối">
+        <span class="slider"></span>
+      </label>
+    </div>
+  </header>
+
+  <main>
+    <!-- ================= LỊCH ================= -->
+    <section aria-labelledby="cal-title">
+      <h2 id="cal-title" class="sr-only">Lịch học</h2>
+
+      <div class="toolbar">
+        <nav class="nav-group" aria-label="Điều hướng lịch">
+          <button type="button" class="btn btn-icon" id="btn-prev" aria-label="Tuần hoặc tháng trước">‹</button>
+          <button type="button" class="btn" id="btn-today">Hôm nay</button>
+          <button type="button" class="btn btn-icon" id="btn-next" aria-label="Tuần hoặc tháng sau">›</button>
+          <span class="title" id="range-label" aria-live="polite"></span>
+        </nav>
+
+        <div class="nav-group">
+          <button type="button" class="btn" id="btn-undo" aria-label="Hoàn tác (Ctrl+Z)" disabled>↶ Hoàn tác</button>
+          <button type="button" class="btn" id="btn-redo" aria-label="Làm lại (Ctrl+Y)" disabled>↷ Làm lại</button>
+          <div class="segmented" role="group" aria-label="Chế độ xem">
+            <button type="button" id="view-week" aria-pressed="true">Tuần</button>
+            <button type="button" id="view-month" aria-pressed="false">Tháng</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="calendar-viewport">
+        <!-- JS dựng .week-grid hoặc .month-grid vào đây -->
+        <div id="calendar"></div>
+      </div>
+
+      <ul class="legend" id="legend" aria-label="Chú giải màu môn học"></ul>
+      <p class="hint">Nhấn vào ca học để chọn trạng thái · Shift+Click hoặc nhấp đúp để đổi nhanh · Chuột phải để bỏ đánh dấu · Ctrl+Z hoàn tác</p>
+    </section>
+
+    <!-- ================= THỐNG KÊ (TV4) ================= -->
+    <section aria-labelledby="stats-title">
+      <h2 id="stats-title">📊 Thống kê chuyên cần</h2>
+      <div class="stats-layout">
+        <div id="tk-table" style="grid-column: 1 / -1; overflow-x: auto"></div>
+        <canvas id="tk-pie" width="360" height="200" role="img" aria-label="Biểu đồ tròn: tỉ lệ có mặt và nghỉ" style="max-width:100%;height:auto"></canvas>
+        <canvas id="tk-bar" width="460" height="240" role="img" aria-label="Biểu đồ cột: phần trăm nghỉ từng môn" style="max-width:100%;height:auto"></canvas>
+      </div>
+      <p><button type="button" class="btn" id="btn-tk-modal">⚠️ Xem cảnh báo chi tiết</button></p>
+    </section>
+  </main>
+
+  <footer>Nhóm 5 thành viên · HTML5 · CSS3 · JavaScript · dữ liệu lưu trong localStorage</footer>
+</div>
+
+<!-- ================= HỘP THOẠI QUẢN LÝ (TV5 nối logic trong data.js) ================= -->
+<div class="overlay" id="manage-overlay" aria-hidden="true">
+  <div class="modal manage-modal" role="dialog" aria-modal="true" aria-labelledby="manage-title">
+    <h3 id="manage-title">Quản lý môn học & buổi học</h3>
+    <div class="segmented" role="group" aria-label="Chọn phần quản lý">
+      <button type="button" id="tab-courses" aria-pressed="true">Môn học</button>
+      <button type="button" id="tab-sessions" aria-pressed="false">Buổi học</button>
+    </div>
+
+    <div id="panel-courses">
+      <ul class="manage-list" id="course-list"></ul>
+      <form id="course-form" class="form-grid" novalidate>
+        <input type="hidden" name="id">
+        <div class="field"><label for="cf-name">Tên môn</label><input id="cf-name" name="name" required maxlength="60" placeholder="VD: Cơ sở dữ liệu"></div>
+        <div class="field"><label for="cf-room">Phòng</label><input id="cf-room" name="room" maxlength="20" placeholder="VD: A101"></div>
+        <div class="field"><label for="cf-total">Tổng số buổi</label><input id="cf-total" name="totalSessions" type="number" min="1" max="200" value="20" required></div>
+        <div class="field"><label for="cf-color">Màu</label><input id="cf-color" name="color" type="color" value="#3b82f6"></div>
+        <div class="field form-actions">
+          <button type="submit" class="btn btn-primary" id="cf-submit">+ Thêm môn</button>
+          <button type="button" class="btn" id="cf-cancel" hidden>Hủy sửa</button>
+        </div>
+      </form>
+    </div>
+
+    <div id="panel-sessions" hidden>
+      <ul class="manage-list" id="session-list"></ul>
+      <form id="session-form" class="form-grid" novalidate>
+        <input type="hidden" name="id">
+        <div class="field"><label for="sf-course">Môn học</label><select id="sf-course" name="courseId" required></select></div>
+        <div class="field"><label for="sf-date">Ngày</label><input id="sf-date" name="date" type="date" required></div>
+        <div class="field"><label for="sf-start">Bắt đầu</label><input id="sf-start" name="startTime" type="time" value="07:30" required></div>
+        <div class="field"><label for="sf-end">Kết thúc</label><input id="sf-end" name="endTime" type="time" value="09:00" required></div>
+        <div class="field"><label for="sf-repeat">Lặp thêm (tuần)</label><input id="sf-repeat" name="repeat" type="number" min="0" max="52" value="0"></div>
+        <div class="field"><label for="sf-note">Ghi chú</label><input id="sf-note" name="note" maxlength="80"></div>
+        <div class="field form-actions">
+          <button type="submit" class="btn btn-primary" id="sf-submit">+ Thêm buổi học</button>
+          <button type="button" class="btn" id="sf-cancel" hidden>Hủy sửa</button>
+        </div>
+      </form>
+    </div>
+
+    <p class="modal-foot"><button type="button" class="btn" id="manage-close">Đóng</button></p>
+  </div>
+</div>
+
+<!-- Thứ tự nạp: TV5 dữ liệu → TV3 điểm danh → TV4 thống kê → TV1 dựng lịch (script bên dưới) -->
+<script src="data.js"></script>
+<script src="attendance.js"></script>
+<script src="thongke.js"></script>
+
+<!-- ===================== TV1: DỰNG LỊCH TUẦN / THÁNG ===================== -->
+<script>
+(function () {
+  'use strict';
+  const D = DataStore, T = D.date;
+  const DAY = ['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'Chủ nhật'];
+  const LABEL = { present: 'Có mặt', late: 'Muộn', absent: 'Vắng', excused: 'Có phép' };
+  const $ = (id) => document.getElementById(id);
+  const pad = (n) => String(n).padStart(2, '0');
+  const dm = (d) => `${pad(d.getDate())}/${pad(d.getMonth() + 1)}`;
+  const hourOf = (t) => Number(t.slice(0, 2));
+
+  const view = { mode: 'week', anchor: new Date() };
+
+  function el(tag, cls, text) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined) e.textContent = text;
+    return e;
+  }
+  const row = () => { const r = el('div'); r.setAttribute('role', 'row'); r.style.display = 'contents'; return r; };
+  const cell = (role, cls, text) => { const c = el('div', cls, text); c.setAttribute('role', role); return c; };
+
+  /* ---------- Nút ca học: cấu trúc khớp CSS của TV2 và JS của TV3 ---------- */
+  function sessionButton(s) {
+    const c = D.getCourse(s.courseId);
+    const name = c ? c.name : '(môn đã xóa)';
+    const st = s.status;                       // null | 'present' | ...
+    const b = el('button', 'session');
+    b.type = 'button';
+    b.dataset.sessionId = s.id;
+    b.dataset.courseId = s.courseId;
+    if (st) b.dataset.status = st;             // không có thuộc tính = chưa điểm danh (CSS :not([data-status]))
+    b.style.setProperty('--mon', c ? c.color : '#64748b');
+    b.setAttribute('aria-label', `${name} – ${LABEL[st] || 'Chưa điểm danh'}`);
+
+    const meta = el('span', 'meta');
+    meta.append(el('span', 'time', `${s.startTime}–${s.endTime}`));
+    if (c && c.room) meta.append(el('span', 'room', c.room));
+
+    const badge = el('span', `badge ${st || 'none'}`, LABEL[st] || 'Chưa điểm danh');
+    badge.dataset.status = st || 'none';
+    b.append(el('span', 'name', name), meta, badge);
+    return b;
+  }
+
+  /* ---------- LỊCH TUẦN: CSS Grid, cột = Thứ 2→CN, hàng = giờ ---------- */
+  function weekGrid(anchor) {
+    const start = T.startOfWeek(anchor);
+    const days = Array.from({ length: 7 }, (_, i) => T.addDays(start, i));
+    const dayIso = days.map(T.iso), todayIso = T.today();
+    const sessions = D.getData().sessions.filter((s) => dayIso.includes(s.date));
+
+    let h0 = 7, h1 = 17;                                   // khung giờ mặc định 07:00 → 17:59, tự giãn nếu có ca ngoài khung
+    sessions.forEach((s) => { h0 = Math.min(h0, hourOf(s.startTime)); h1 = Math.max(h1, hourOf(s.startTime) + 1); });
+
+    const grid = el('div', 'week-grid');
+    grid.setAttribute('role', 'grid');
+    grid.setAttribute('aria-label', `Lịch tuần ${dm(days[0])} đến ${dm(days[6])}`);
+    grid.setAttribute('aria-rowcount', String(h1 - h0 + 1));
+    grid.setAttribute('aria-colcount', '8');
+
+    const hr = row();
+    hr.append(cell('columnheader', 'head', 'Giờ'));
+    days.forEach((d, i) => {
+      const h = cell('columnheader', 'head' + (dayIso[i] === todayIso ? ' today' : ''));
+      if (dayIso[i] === todayIso) h.setAttribute('aria-current', 'date');
+      const t = el('time'); t.dateTime = dayIso[i]; t.textContent = dm(d);
+      const small = el('small'); small.append(t);
+      h.append(el('span', '', DAY[i]), small);
+      hr.append(h);
+    });
+    grid.append(hr);
+
+    for (let h = h0; h < h1; h++) {
+      const r = row();
+      r.append(cell('rowheader', 'time', `${pad(h)}:00`));
+      days.forEach((d, i) => {
+        const list = sessions.filter((s) => s.date === dayIso[i] && hourOf(s.startTime) === h)
+                             .sort((a, b) => a.startTime.localeCompare(b.startTime));
+        const c = cell('gridcell', 'cell' + (dayIso[i] === todayIso ? ' today' : '') + (list.length > 1 ? ' multi' : ''));
+        c.dataset.date = dayIso[i];
+        c.dataset.hour = pad(h);
+        c.setAttribute('aria-label', `${DAY[i]} ngày ${dm(d)}, ${pad(h)}:00: ${list.length ? list.length + ' ca học' : 'trống'}`);
+        list.forEach((s) => c.append(sessionButton(s)));
+        r.append(c);
+      });
+      grid.append(r);
+    }
+    return { grid, label: `${dm(days[0])} – ${dm(days[6])}/${days[6].getFullYear()}` };
+  }
+
+  /* ---------- LỊCH THÁNG: grid 7 cột ---------- */
+  function monthGrid(anchor) {
+    const y = anchor.getFullYear(), m = anchor.getMonth();
+    const first = new Date(y, m, 1), last = new Date(y, m + 1, 0);
+    const from = T.startOfWeek(first), to = T.addDays(T.startOfWeek(last), 6);
+    const todayIso = T.today();
+    const sessions = D.getData().sessions;
+
+    const grid = el('div', 'month-grid');
+    grid.setAttribute('role', 'grid');
+    grid.setAttribute('aria-label', `Lịch tháng ${m + 1} năm ${y}`);
+
+    const hr = row();
+    DAY.forEach((n) => hr.append(cell('columnheader', 'dow', n === 'Chủ nhật' ? 'CN' : n)));
+    grid.append(hr);
+
+    let r = null, i = 0;
+    for (let d = from; d <= to; d = T.addDays(d, 1), i++) {
+      if (i % 7 === 0) { r = row(); grid.append(r); }
+      const ds = T.iso(d);
+      const list = sessions.filter((s) => s.date === ds);
+      const c = cell('gridcell', 'day' + (d.getMonth() !== m ? ' other-month' : '') + (ds === todayIso ? ' today' : ''));
+      c.dataset.date = ds;
+      c.tabIndex = 0;
+      c.setAttribute('aria-label', `Ngày ${d.getDate()} tháng ${d.getMonth() + 1}: ${list.length} ca học. Nhấn để xem tuần này.`);
+      const num = el('span', 'num', String(d.getDate()));
+      const dots = el('span', 'dots');
+      list.forEach((s) => {
+        const co = D.getCourse(s.courseId);
+        const dot = el('span', 'dot');
+        dot.style.background = co ? co.color : '#64748b';
+        dot.dataset.status = s.status || 'none';
+        dot.title = `${co ? co.name : ''} ${s.startTime}–${s.endTime} · ${LABEL[s.status] || 'Chưa điểm danh'}`;
+        dots.append(dot);
+      });
+      c.append(num, dots);
+      r.append(c);
+    }
+    return { grid, label: `Tháng ${m + 1}/${y}` };
+  }
+
+  /* ---------- Chú giải màu môn ---------- */
+  function renderLegend() {
+    const ul = $('legend'); ul.replaceChildren();
+    D.getData().courses.forEach((c) => {
+      const li = el('li', '', c.name);
+      li.style.setProperty('--c', c.color);
+      ul.append(li);
+    });
+  }
+
+  /* ---------- Vẽ lại (dir: 'next' | 'prev' | 'switch' | undefined) ---------- */
+  function render(dir) {
+    const out = view.mode === 'week' ? weekGrid(view.anchor) : monthGrid(view.anchor);
+    const cal = $('calendar');
+    cal.dataset.view = view.mode;
+    cal.replaceChildren(out.grid);
+    $('range-label').textContent = out.label;
+    $('view-week').setAttribute('aria-pressed', String(view.mode === 'week'));
+    $('view-month').setAttribute('aria-pressed', String(view.mode === 'month'));
+    renderLegend();
+
+    // Hiệu ứng của TV2: transform + @keyframes
+    const fx = dir === 'next' ? 'slide-in-right' : dir === 'prev' ? 'slide-in-left' : dir === 'switch' ? 'zoom-in' : '';
+    if (fx) {
+      out.grid.classList.add(fx, 'animating');
+      out.grid.addEventListener('animationend', () => out.grid.classList.remove(fx), { once: true });
+      setTimeout(() => out.grid.classList.remove('animating'), 800);
+    }
+  }
+
+  function shift(dir) {
+    const a = view.anchor;
+    view.anchor = view.mode === 'week' ? T.addDays(a, 7 * dir) : new Date(a.getFullYear(), a.getMonth() + dir, 1);
+    render(dir > 0 ? 'next' : 'prev');
+  }
+
+  function gotoWeekOf(ds) {
+    view.anchor = T.parse(ds); view.mode = 'week'; render('switch');
+  }
+
+  /* ---------- Gắn sự kiện ---------- */
+  $('btn-prev').addEventListener('click', () => shift(-1));
+  $('btn-next').addEventListener('click', () => shift(1));
+  $('btn-today').addEventListener('click', () => { view.anchor = new Date(); render('switch'); });
+  $('view-week').addEventListener('click', () => { if (view.mode !== 'week') { view.mode = 'week'; render('switch'); } });
+  $('view-month').addEventListener('click', () => { if (view.mode !== 'month') { view.mode = 'month'; render('switch'); } });
+
+  $('calendar').addEventListener('click', (e) => {
+    const day = e.target.closest('.month-grid .day'); if (day) gotoWeekOf(day.dataset.date);
+  });
+  $('calendar').addEventListener('keydown', (e) => {
+    const day = e.target.closest('.month-grid .day');
+    if (day && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); gotoWeekOf(day.dataset.date); }
+  });
+
+  // Dữ liệu đổi → vẽ lại. Riêng đổi điểm danh ở lịch tuần thì TV3 đã tự cập nhật tại chỗ (giữ hiệu ứng pop).
+  D.subscribe((d) => {
+    if (d.kind === 'status' && view.mode === 'week') return;
+    render();
+  });
+
+  /* ---------- Chế độ tối (class .dark của TV2) ---------- */
+  const dark = $('dark-toggle');
+  let saved = null; try { saved = localStorage.getItem('classpulse.theme'); } catch (e) {}
+  const prefersDark = window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches;
+  const useDark = saved ? saved === 'dark' : prefersDark;
+  const applyTheme = (on) => { document.documentElement.classList.toggle('dark', on); document.documentElement.classList.toggle('light', !on); };
+  applyTheme(useDark);
+  dark.checked = useDark;
+  dark.addEventListener('change', () => {
+    applyTheme(dark.checked);
+    try { localStorage.setItem('classpulse.theme', dark.checked ? 'dark' : 'light'); } catch (e) {}
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
