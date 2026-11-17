@@ -2043,3 +2043,29 @@
     }
   }
   
+
+/* =====================================================================
+   BỔ SUNG KHI GHÉP NHÓM (TV1/TV5 cần cho HTML mới – TV2 có thể chỉnh lại)
+   ===================================================================== */
+.header-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.hint { margin-top: 10px; font-size: .8rem; color: var(--text-muted); }
+.week-grid .head:last-child { border-right: none; }
+.month-grid .day { cursor: pointer; }
+.month-grid .dot[data-status="present"] { box-shadow: 0 0 0 2px var(--st-present); }
+.month-grid .dot[data-status="late"]    { box-shadow: 0 0 0 2px var(--st-late); }
+.month-grid .dot[data-status="excused"] { box-shadow: 0 0 0 2px var(--st-excused); }
+.month-grid .dot[data-status="absent"]  { box-shadow: 0 0 0 2px var(--st-absent); opacity: .7; }
+
+/* Hộp thoại quản lý (TV5) */
+.manage-modal { width: min(100%, 660px); display: flex; flex-direction: column; gap: 14px; }
+.manage-list { list-style: none; padding: 0; margin: 0; max-height: 220px; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius); }
+.manage-list li { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--border); font-size: .9rem; }
+.manage-list li:last-child { border-bottom: none; }
+.manage-list .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.manage-list .swatch { width: 12px; height: 12px; border-radius: 3px; flex: none; }
+.manage-list .btn { padding: 4px 10px; font-size: .8rem; }
+.form-actions { flex-direction: row; align-items: flex-end; gap: 8px; }
+.modal-foot { margin: 0; text-align: right; }
+
+@media (min-width: 900px) { .stats-layout canvas { grid-column: span 2; } }
+[hidden] { display: none !important; }
